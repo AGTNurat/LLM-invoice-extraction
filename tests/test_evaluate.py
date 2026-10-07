@@ -120,8 +120,10 @@ def run(test_records, error_rate, seed=0):
 def test_score_run_perfect_and_columns(test_records):
     df = run(test_records, 0.0)
     assert len(df) == 40 and df["all_correct"].all() and not df["failed"].any()
-    for c in ("doc_id", "template", "noise_level", "hard", "document_type", "number_format", *ALL_FIELDS):
+    for c in ("doc_id", "template", "noise_level", "hard", "doc_type", "number_format", *ALL_FIELDS):
         assert c in df.columns
+    # regression: the 'document_type' feature must not be overwritten by the scored boolean field
+    assert set(df["doc_type"]) == {"invoice", "credit_note"} and df["document_type"].dtype == bool
 
 
 def test_score_run_rejects_non_test_records(records):
@@ -149,7 +151,7 @@ def test_accuracy_table_and_breakdown_consistency(test_records):
     assert list(tab.field) == list(ALL_FIELDS) + ["ALL_FIELDS_CORRECT"]
     assert (tab.ci_low <= tab.accuracy).all() and (tab.accuracy <= tab.ci_high).all()
     assert (tab.n == 40).all()
-    for by in ("template", "noise_level", "hard", "document_type"):
+    for by in ("template", "noise_level", "hard", "doc_type"):
         b = breakdown(df, by)
         assert b["n"].sum() == 40 and b["correct"].sum() == df["all_correct"].sum()
         assert ((0 <= b.ci_low) & (b.ci_high <= 1)).all()
