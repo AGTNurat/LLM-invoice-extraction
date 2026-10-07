@@ -5,6 +5,8 @@
   python -m src.cli run --split test --strategy all            # the reported run (once per strategy)
   python -m src.cli report --split test                        # writes results/summary.md + error_analysis.md
   python -m src.cli run --mock --split test --yes              # offline pipeline check (never real results)
+  python -m src.cli description-audit --split test             # POST-HOC: writes results/description_audit.md
+                                                                 # (reads cached results only, no API calls)
 
 Live runs print a cost estimate and ask for confirmation first (skip with --yes). The model comes from
 --model or $ANTHROPIC_MODEL; the API key only from $ANTHROPIC_API_KEY.
@@ -24,6 +26,7 @@ from . import generate as gen
 from .cost import DEFAULT_OUT_TOKENS, estimate_strategy, format_estimate, lookup_price
 from .extract import (STRATEGIES, ConfigError, LLMExtractor, MockExtractor, extract_all, load_few_shot_examples,
                       load_results, pdf_to_text, resolve_model, save_results)
+from .description_audit import write_audit
 from .report import write_reports
 
 FATAL_API_ERRORS = (anthropic.AuthenticationError, anthropic.PermissionDeniedError, anthropic.NotFoundError,
@@ -140,6 +143,29 @@ def cmd_run(a, confirm, client) -> int:
     return 0
 
 
+def cmd_description_audit(a) -> int:
+    """POST-HOC. Reads cached extraction results already saved by `run`; makes no API calls and touches
+    neither the cache nor any extraction output."""
+    data_dir, out_dir = Path(a.data_dir), Path(a.out_dir)
+    records = gen.load_split(data_dir, a.split)
+    if not records:
+        raise ConfigError(f"No {a.split} documents under {data_dir}.")
+    label = "mock" if a.mock else resolve_model(a.model)
+    runs = {}
+    for s in STRATEGIES:
+        p = _result_path(out_dir, label, a.split, s)
+        if p.exists():
+            runs[s] = load_results(p)
+        else:
+            print(f"warning: no saved results for strategy '{s}' at {p}")
+    if not runs:
+        raise ConfigError("No saved results found. Run `python -m src.cli run ...` first.")
+    dest = Path(a.report_dir) / "description_audit.md" if a.report_dir else Path(a.results_dir) / "description_audit.md"
+    p = write_audit(dest, runs, records)
+    print(f"Wrote {p} (post-hoc; read {len(runs)} cached strategy result file(s), made no API calls)")
+    return 0
+
+
 def cmd_report(a) -> int:
     data_dir, out_dir, results_dir = Path(a.data_dir), Path(a.out_dir), Path(a.results_dir)
     records = gen.load_split(data_dir, a.split)
@@ -222,6 +248,13 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--model", help="overrides $ANTHROPIC_MODEL")
     rp.add_argument("--mock", action="store_true")
     rp.add_argument("--report-dir", help="override the output directory")
+
+    da = sub.add_parser("description-audit", help="POST-HOC: audit line-item description mismatches from cache")
+    common(da)
+    da.add_argument("--split", choices=("dev", "test"), default="test")
+    da.add_argument("--model", help="overrides $ANTHROPIC_MODEL")
+    da.add_argument("--mock", action="store_true")
+    da.add_argument("--report-dir", help="override the output directory")
     return p
 
 
@@ -232,6 +265,8 @@ def main(argv=None, *, confirm=input, client=None) -> int:
             return cmd_generate(a)
         if a.cmd == "run":
             return cmd_run(a, confirm, client)
+        if a.cmd == "description-audit":
+            return cmd_description_audit(a)
         return cmd_report(a)
     except ConfigError as e:
         print(f"error: {e}", file=sys.stderr)

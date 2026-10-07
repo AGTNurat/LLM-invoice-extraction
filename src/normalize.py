@@ -5,6 +5,7 @@ All functions are total: unparseable input returns None rather than raising.
 from __future__ import annotations
 
 import re
+import string
 import unicodedata
 from datetime import date, datetime
 
@@ -143,6 +144,19 @@ def normalize_currency(value) -> str | None:
         return None
     c = value.strip().upper()
     return c if c in CURRENCIES else None
+
+
+_STRIP_PUNCT_WS = re.compile(r"[\s" + re.escape(string.punctuation) + r"]+")
+
+
+def description_key(value) -> str:
+    """POST-HOC (added for the lenient secondary metric / description audit; not used by the primary
+    field comparisons above). Casefold + NFKC + strip ALL whitespace and punctuation. Stricter than
+    normalize_name (which only collapses whitespace): "A, B" and "A B" collapse to the same key here,
+    but a changed word still produces a different key."""
+    if value is None:
+        return ""
+    return _STRIP_PUNCT_WS.sub("", unicodedata.normalize("NFKC", str(value)).casefold())
 
 
 def normalize_doc_type(value) -> str | None:

@@ -41,12 +41,16 @@ def test_reports_written_and_deterministic(records, tmp_path):
     sp2, ep2 = write_reports(tmp_path / "r2", records, runs, META)
     assert s1 == sp2.read_text(encoding="utf-8") and e1 == ep2.read_text(encoding="utf-8")
     for h in ("## 1. Strategy comparison", "## 2. Per-field accuracy", "### Layout template", "### Noise level",
-              "### Hard cases", "## 4. Validation layer", "## 5. Usage", "McNemar"):
+              "### Hard cases", "## 4. Validation layer", "## 5. Usage", "## 6. Post-hoc secondary metric",
+              "McNemar"):
         assert h in s1
+    # sections must appear in numeric order (regression: "## 6." previously printed before "## 5.")
+    order = [s1.index(h) for h in ("## 1.", "## 2.", "## 3.", "## 4.", "## 5.", "## 6.")]
+    assert order == sorted(order)
     for h in ("## Strategy: zero_shot", "### Taxonomy", "### Examples", "## What the validation layer missed"):
         assert h in e1
     assert "MOCK RUN" in s1 and "MOCK RUN" in e1
-    assert "| credit_note |" in s1 and "| invoice |" in s1  # document-type breakdown has real group labels
+    assert "| credit_note |" in s1 and "| invoice |" in s1  # document type breakdown has real group labels
     assert all(name in s1 for name in runs)
     assert "nan" not in s1.lower().replace("n/a", "") and "nan" not in e1.lower()
 

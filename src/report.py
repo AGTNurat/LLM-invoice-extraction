@@ -12,8 +12,8 @@ from pathlib import Path
 import pandas as pd
 
 from .evaluate import (CATEGORY_DESCRIPTIONS, _extraction_of, accuracy_table, breakdown, error_records,
-                       evaluate_validation, paired_comparison, reason_code_table, score_run, strategy_overview,
-                       validation_recall_by_field, wilson_interval)
+                       evaluate_validation, lenient_score_run, paired_comparison, reason_code_table, score_run,
+                       strategy_overview, validation_recall_by_field, wilson_interval)
 from .schema import ALL_FIELDS
 from .validate import validate_batch
 
@@ -56,7 +56,8 @@ def evaluate_runs(records: list[dict], runs: dict[str, dict], split: str = "test
         scores = score_run(results, records, split=split)
         validation = validate_batch(extractions)
         out[name] = {"scores": scores, "validation": validation, "results": results,
-                     "errors": error_records(name, results, records, validation)}
+                     "errors": error_records(name, results, records, validation),
+                     "lenient_scores": lenient_score_run(results, records, split=split)}
     return out
 
 
@@ -157,7 +158,45 @@ def build_summary(records: list[dict], ev: dict, meta: dict) -> str:
                     "docs needing retries", "docs where temperature=0 was NOT applied"], _usage_rows(ev)), "",
           "Token counts are those recorded when each response was first fetched. If any document shows "
           "temperature=0 was not applied, the model rejected that setting and ran at its default.", ""]
+    L += build_posthoc_lenient_section(ev, names)
     return "\n".join(L).rstrip() + "\n"
+
+
+def build_posthoc_lenient_section(ev: dict, names: list[str]) -> list[str]:
+    """POST-HOC: 'all fields correct (lenient descriptions)' secondary metric. Defined AFTER seeing the
+    primary test-split results (the zero-shot error taxonomy showed punctuation/whitespace-only
+    description mismatches; see results/description_audit.md). Primary tables above are unchanged."""
+    lscores = {s: ev[s]["lenient_scores"] for s in names}
+    L = ["## 6. Post-hoc secondary metric: lenient line-item descriptions", "",
+         "> **Post-hoc.** This metric and the rule below were defined after seeing the primary test-split "
+         "results, specifically after `results/description_audit.md` showed zero-shot line-item "
+         "description mismatches that were only punctuation/whitespace/case (e.g. a missing comma). It "
+         "is reported separately and does not change any number in sections 1-5 above.", "",
+         "**Rule:** line-item descriptions are compared after casefolding and removing all punctuation "
+         "and whitespace. Nothing fuzzier: no edit distance, no word reordering, no synonym handling. "
+         "Every other field, and quantity/unit_price/amount, are compared exactly as in the primary "
+         "metric. A document with a word-level description difference is still wrong under this metric.",
+         "", "### Primary vs. lenient, all-fields-correct", "",
+         md_table(["Strategy", "Primary (all fields correct)", "Lenient (all fields correct)"],
+                  [[s, rate_cell(int(ev[s]["scores"]["all_correct"].sum()), len(ev[s]["scores"])),
+                    rate_cell(int(lscores[s]["all_correct"].sum()), len(lscores[s]))]
+                   for s in names]), ""]
+    if len(names) > 1:
+        pc = paired_comparison(lscores)
+        L += ["Paired comparison under the LENIENT metric (exact McNemar test on all-fields-correct):", "",
+              md_table(["A", "B", "both correct", "only A", "only B", "both wrong", "McNemar p"],
+                       [[r.a, r.b, r.both_correct, r.only_a_correct, r.only_b_correct, r.both_wrong,
+                         f"{r.mcnemar_p:.3f}"] for r in pc.itertuples()]), ""]
+    L += ["### Validation layer under the lenient metric", "",
+          "'Wrong' is redefined using the lenient all-fields-correct; validator behaviour (flags) is "
+          "unchanged — only which documents count as wrong changes.", ""]
+    lvals = {s: evaluate_validation(lscores[s], ev[s]["validation"]) for s in names}
+    L += [md_table(["Strategy", "Wrong (lenient)", "Flagged", "Recall", "Precision", "Straight-through",
+                    "Wrong among unflagged", "Correct but flagged"],
+                   [[s, v["n_wrong"], v["n_flagged"], row_cell(v["recall"]), row_cell(v["precision"]),
+                     row_cell(v["straight_through_rate"]), row_cell(v["error_rate_unflagged"]),
+                     row_cell(v["false_flag_rate"])] for s, v in lvals.items()]), ""]
+    return L
 
 
 #  error_analysis.md

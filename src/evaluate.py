@@ -16,8 +16,8 @@ from itertools import combinations
 
 import pandas as pd
 
-from .normalize import (normalize_currency, normalize_date, normalize_doc_type, normalize_invoice_number,
-                        normalize_name, numbers_match, parse_number)
+from .normalize import (description_key, normalize_currency, normalize_date, normalize_doc_type,
+                        normalize_invoice_number, normalize_name, numbers_match, parse_number)
 from .schema import ALL_FIELDS, HEADER_NUM_FIELDS, LINE_ITEM_FIELDS
 
 META_COLUMNS = ("template", "noise_level", "hard", "hard_reason")
@@ -325,6 +325,54 @@ def classify_line_items_error(pred, truth) -> tuple[str, str]:
 def _short(v) -> str:
     s = repr(v)
     return s if len(s) <= 60 else s[:57] + "..."
+
+
+# ----------------------------------------------------------------------------- POST-HOC: lenient-description metric
+#
+# Added after seeing test-split results (the zero-shot error taxonomy showed several line-item
+# "description_mismatch" entries that were punctuation/whitespace-only, e.g. a missing comma). This
+# section does not change field_correct, line_item_correct, score_document or score_run: it duplicates
+# just enough logic under a new name so the primary metric is provably untouched (see
+# tests/test_lenient_metric.py::test_primary_metric_unchanged). No edit distance, no reordering beyond
+# the primary metric's own order-insensitive item matching, no synonym handling: only punctuation,
+# whitespace and case are ignored in descriptions. A changed WORD still fails this metric too.
+def lenient_line_item_correct(pred, truth) -> bool:
+    """Same as line_item_correct, except descriptions are compared with punctuation/whitespace/case
+    stripped instead of normalize_name's whitespace-collapse-only comparison."""
+    if not isinstance(pred, list) or len(pred) != len(truth) or not all(isinstance(i, dict) for i in pred):
+        return False
+    for p, t in zip(sorted(pred, key=_line_key), sorted(truth, key=_line_key)):
+        if description_key(p.get("description")) != description_key(t.get("description")):
+            return False
+        if not all(numbers_match(p.get(k), t.get(k)) for k in LINE_ITEM_FIELDS if k != "description"):
+            return False
+    return True
+
+
+def lenient_score_document(pred: dict | None, truth: dict) -> dict[str, bool]:
+    """Like score_document, but line_items uses lenient_line_item_correct. Every other field is scored
+    identically to the primary metric (same function, same result)."""
+    out = {f: score_document(pred, truth)[f] for f in ALL_FIELDS if f != "line_items"}
+    out["line_items"] = (False if not isinstance(pred, dict) or "line_items" not in pred
+                         else bool(lenient_line_item_correct(pred["line_items"], truth["line_items"])))
+    out["all_correct"] = all(out[f] for f in ALL_FIELDS)
+    return out
+
+
+def lenient_score_run(extractions: dict, records: list[dict], split: str = "test") -> pd.DataFrame:
+    """Like score_run, but using lenient_score_document. Same columns, same metadata, same split guard."""
+    bad = [r["doc_id"] for r in records if r["split"] != split]
+    if bad:
+        raise ValueError(f"lenient_score_run is restricted to the {split!r} split; got {bad[:3]}...")
+    rows = []
+    for r in sorted(records, key=lambda r: r["doc_id"]):
+        pred = _extraction_of(extractions.get(r["doc_id"]))
+        sc = lenient_score_document(pred, r["truth"])
+        m, f = r["meta"], r["meta"]["features"]
+        feats = {("doc_type" if c == "document_type" else c): f[c] for c in FEATURE_COLUMNS}
+        rows.append({"doc_id": r["doc_id"], **{c: m[c] for c in META_COLUMNS}, **feats,
+                     "failed": not isinstance(pred, dict), **sc})
+    return pd.DataFrame(rows)
 
 
 def error_records(strategy: str, extractions: dict, records: list[dict],

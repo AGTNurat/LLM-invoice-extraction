@@ -1,0 +1,31 @@
+{
+  "test_runs": [
+    {
+      "model": "claude-haiku-4-5",
+      "strategy": "zero_shot",
+      "fingerprint": "2d1a61f38471558eefd460f63f740b2c41f9958b2a76c0d4f64732ef6dd53140",
+      "n_docs": 40,
+      "live_calls": 40,
+      "rerun_allowed": false,
+      "timestamp": "2026-10-07T19:50:10+00:00"
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "strategy": "few_shot",
+      "fingerprint": "cdf620b2e3b8ef3634a49d8c8d863dfc226331f6ee89ac38b25ea46c3754596b",
+      "n_docs": 40,
+      "live_calls": 40,
+      "rerun_allowed": false,
+      "timestamp": "2026-10-07T19:52:29+00:00"
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "strategy": "rules",
+      "fingerprint": "652c5a8a17d9e8f3562b27143205ed27d8456c4d6ff9ffbf4186b2c3f2d6688b",
+      "n_docs": 40,
+      "live_calls": 40,
+      "rerun_allowed": false,
+      "timestamp": "2026-10-07T19:54:38+00:00"
+    }
+  ]
+}

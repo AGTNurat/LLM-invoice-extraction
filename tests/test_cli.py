@@ -159,6 +159,29 @@ def test_config_errors_exit_2(tmp_path, data_dir, monkeypatch, capsys):
     assert "No saved results" in capsys.readouterr().err
 
 
+# ------------------------------------------------------------------ description-audit (post-hoc, no API calls)
+def test_description_audit_reads_cache_only(tmp_path, data_dir, truth_client_factory, env, monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("description-audit must not construct a live API client")
+    monkeypatch.setattr(anthropic, "Anthropic", boom)
+    c = truth_client_factory()
+    base = ["--data-dir", str(data_dir), "--split", "test", *dirs(tmp_path)]
+    assert main(["run", *base, "--strategy", "zero_shot", "--yes"], client=c) == 0
+    assert c.calls == 40
+    rep = ["--data-dir", str(data_dir), *dirs(tmp_path, cache=False)]
+    assert main(["description-audit", "--split", "test", *rep], client=c) == 0
+    assert c.calls == 40  # unchanged: the audit made no calls
+    p = tmp_path / "res" / "description_audit.md"
+    assert p.exists() and "post-hoc" in p.read_text(encoding="utf-8").lower()
+    assert "zero_shot" in p.read_text(encoding="utf-8")
+
+
+def test_description_audit_requires_saved_results(tmp_path, data_dir, env, capsys):
+    rep = ["--data-dir", str(data_dir), *dirs(tmp_path, cache=False)]
+    assert main(["description-audit", "--split", "test", *rep]) == 2
+    assert "No saved results" in capsys.readouterr().err
+
+
 def test_model_flag_overrides_env(tmp_path, data_dir, truth_client_factory, env):
     c = truth_client_factory()
     base = ["--data-dir", str(data_dir), "--split", "dev", "--strategy", "rules", "--yes", *dirs(tmp_path)]
