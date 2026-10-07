@@ -7,6 +7,8 @@
   python -m src.cli run --mock --split test --yes              # offline pipeline check (never real results)
   python -m src.cli description-audit --split test             # POST-HOC: writes results/description_audit.md
                                                                  # (reads cached results only, no API calls)
+  python -m src.cli stress-validator                            # POST-HOC: writes results/validator_stress_test.md
+                                                                 # (fault-injection on ground truth; no API calls)
 
 Live runs print a cost estimate and ask for confirmation first (skip with --yes). The model comes from
 --model or $ANTHROPIC_MODEL; the API key only from $ANTHROPIC_API_KEY.
@@ -27,7 +29,9 @@ from .cost import DEFAULT_OUT_TOKENS, estimate_strategy, format_estimate, lookup
 from .extract import (STRATEGIES, ConfigError, LLMExtractor, MockExtractor, extract_all, load_few_shot_examples,
                       load_results, pdf_to_text, resolve_model, save_results)
 from .description_audit import write_audit
+from .generate import DEFAULT_SEED
 from .report import write_reports
+from .stress_validator import write_stress_report
 
 FATAL_API_ERRORS = (anthropic.AuthenticationError, anthropic.PermissionDeniedError, anthropic.NotFoundError,
                     anthropic.BadRequestError)
@@ -166,6 +170,16 @@ def cmd_description_audit(a) -> int:
     return 0
 
 
+def cmd_stress_validator(a) -> int:
+    """POST-HOC. Fault-injection test of src/validate.py against the seeded ground-truth records.
+    Makes no API calls and does not read or write any cached extraction."""
+    records = gen.build_records(a.seed)
+    dest = Path(a.results_dir) / "validator_stress_test.md"
+    p = write_stress_report(dest, records, seed=a.stress_seed)
+    print(f"Wrote {p} (post-hoc; fault-injection only, made no API calls)")
+    return 0
+
+
 def cmd_report(a) -> int:
     data_dir, out_dir, results_dir = Path(a.data_dir), Path(a.out_dir), Path(a.results_dir)
     records = gen.load_split(data_dir, a.split)
@@ -255,6 +269,10 @@ def build_parser() -> argparse.ArgumentParser:
     da.add_argument("--model", help="overrides $ANTHROPIC_MODEL")
     da.add_argument("--mock", action="store_true")
     da.add_argument("--report-dir", help="override the output directory")
+
+    sv = sub.add_parser("stress-validator", help="POST-HOC: fault-injection test of src/validate.py")
+    common(sv)
+    sv.add_argument("--stress-seed", type=int, default=0, help="seed for the corruption RNG (not the dataset seed)")
     return p
 
 
@@ -267,6 +285,8 @@ def main(argv=None, *, confirm=input, client=None) -> int:
             return cmd_run(a, confirm, client)
         if a.cmd == "description-audit":
             return cmd_description_audit(a)
+        if a.cmd == "stress-validator":
+            return cmd_stress_validator(a)
         return cmd_report(a)
     except ConfigError as e:
         print(f"error: {e}", file=sys.stderr)

@@ -182,6 +182,20 @@ def test_description_audit_requires_saved_results(tmp_path, data_dir, env, capsy
     assert "No saved results" in capsys.readouterr().err
 
 
+# ------------------------------------------------------------------ stress-validator (post-hoc, no API calls)
+def test_stress_validator_writes_report_without_api_or_cache(tmp_path, monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("stress-validator must not construct a live API client")
+    monkeypatch.setattr(anthropic, "Anthropic", boom)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    assert main(["stress-validator", *dirs(tmp_path, cache=False)]) == 0
+    p = tmp_path / "res" / "validator_stress_test.md"
+    assert p.exists()
+    txt = p.read_text(encoding="utf-8")
+    assert "post-hoc" in txt.lower() and "coordinated_price" in txt and "0 of 60" in txt
+
+
 def test_model_flag_overrides_env(tmp_path, data_dir, truth_client_factory, env):
     c = truth_client_factory()
     base = ["--data-dir", str(data_dir), "--split", "dev", "--strategy", "rules", "--yes", *dirs(tmp_path)]
