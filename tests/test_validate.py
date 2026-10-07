@@ -1,5 +1,4 @@
 import copy
-
 import pytest
 
 from src.generate import build_records

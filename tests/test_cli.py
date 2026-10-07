@@ -1,10 +1,8 @@
 import json
-from types import SimpleNamespace
-
 import anthropic
 import pytest
-
 import src.extract as ex
+from types import SimpleNamespace
 from src.cli import changed_prompts, main, read_log
 from src.cost import cost_usd, estimate_strategy, format_estimate, lookup_price
 from src.extract import LLMExtractor, extract_all, format_user, load_few_shot_examples, pdf_to_text
