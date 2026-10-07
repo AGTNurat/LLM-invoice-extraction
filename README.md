@@ -1,4 +1,4 @@
-# invoice-extraction-eval
+# LLM-Based Invoice Extraction and Evaluation
 
 LLM-based extraction of structured data from semi-structured vendor invoices, with deterministic
 validation checks and a rigorous, reproducible accuracy evaluation.
@@ -7,10 +7,10 @@ validation checks and a rigorous, reproducible accuracy evaluation.
 
 ## Problem
 
-Finance-operations teams receive invoices in many layouts. Extracting vendor, dates, line items and
-totals by hand is slow and error-prone. This project asks: how accurately can an LLM extract these
-fields, can cheap deterministic checks catch its mistakes, and how much can be processed
-straight-through without human review?
+Finance operations teams receive invoices in many layouts. Extracting vendor, dates, line items and
+totals by hand is slow and error-prone. This project covers how accurately an LLM can extract these
+fields, conduct cheap deterministic checks to catch its mistakes, and how much can be processed
+straight through without human review.
 
 ## Design
 
