@@ -1,4 +1,4 @@
-# invoice-extraction-eval
+# LLM Based Invoice Extraction & Evaluation
 
 LLM-based extraction of structured data from semi-structured vendor invoices, with deterministic
 validation checks and a reproducible accuracy evaluation.
@@ -9,7 +9,7 @@ validation checks and a reproducible accuracy evaluation.
 
 ## Problem
 
-Finance-operations teams receive invoices in many layouts. Keying vendor, dates, line items and totals by
+Finance operations teams receive invoices in many layouts. Keying vendor, dates, line items and totals by
 hand is slow and error-prone. This project asks three questions:
 
 1. How accurately can an LLM extract these fields, and how much does the prompting strategy matter?
@@ -108,9 +108,7 @@ as a share of all documents), plus the false-flag rate and the error rate among 
 classified by deterministic rules into a taxonomy (sign errors, day/month swaps, dropped line items, and so on).
 
 ## How to run
-
-Requires Python 3.11+ (developed and tested on 3.14; 3.11 is untested). Commands are for PowerShell.
-
+Commands for Powershell:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
